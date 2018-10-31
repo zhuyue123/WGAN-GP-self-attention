@@ -7,7 +7,7 @@ from utils import pp, visualize, to_json, show_all_variables
 
 import tensorflow as tf
 
-os.environ['CUDA_VISBLE_DEVICES'] = '1'
+#os.environ['CUDA_VISBLE_DEVICES'] = '1'
 flags = tf.app.flags
 flags.DEFINE_integer("epoch", 10000, "Epoch to train [25]")
 flags.DEFINE_float("learning_rate_g", 0.0001, "Learning rate of for adam [0.0002]")

@@ -3,9 +3,12 @@ import os
 import time
 import math
 from glob import glob
+from typing import Optional, Any, Union
+
 import tensorflow as tf
 import numpy as np
 from six.moves import xrange
+from tensorflow import TensorShape, SparseTensor, Tensor
 
 from ops import *
 from utils import *
@@ -17,7 +20,7 @@ class WGAN_GP(object):
   #model_name = "WGAN_GP"     # name for checkpoint
   def __init__(self, sess, input_height=96, input_width=96, crop=False,
          batch_size=64, sample_num = 64, output_height=96, output_width=96,
-         z_dim=100, gf_dim=64, df_dim=32,y_dim=None,
+         z_dim=128, gf_dim=64, df_dim=32,y_dim=None,
          gfc_dim=1024, dfc_dim=1024, c_dim=3, dataset_name='default',
          input_fname_pattern='*.jpg', checkpoint_dir=None, sample_dir=None,lambd=10):
     """
@@ -46,7 +49,7 @@ class WGAN_GP(object):
 
     self.z_dim = z_dim
     self.y_dim = y_dim
-	
+
     self.gf_dim = gf_dim
     self.df_dim = df_dim
 
@@ -62,17 +65,19 @@ class WGAN_GP(object):
     self.g_bn1 = batch_norm(name='g_bn1')
     self.g_bn2 = batch_norm(name='g_bn2')
     self.g_bn3 = batch_norm(name='g_bn3')
+    self.g_bn4 = batch_norm(name='g_bn4')
+    self.g_bn5 = batch_norm(name='g_bn5')
 
     self.dataset_name = dataset_name
-	
+
     self.input_fname_pattern = input_fname_pattern
-	
+
     self.checkpoint_dir = checkpoint_dir
 
     self.data = glob(os.path.join("./data", self.dataset_name, self.input_fname_pattern))
-	
-    imreadImg = imread(self.data[0]);
-	
+
+    imreadImg = imread(self.data[0])
+
     if len(imreadImg.shape) >= 3: #check if image is a non-grayscale image by checking channel number
       self.c_dim = imread(self.data[0]).shape[-1]
     else:
@@ -94,7 +99,7 @@ class WGAN_GP(object):
     inputs = self.inputs
 
     self.z = tf.placeholder(tf.float32, [None, self.z_dim], name='z')
-    
+
     self.z_sum = histogram_summary("z", self.z)
     """ Loss Function """
     self.G                  = self.generator(self.z, self.y)
@@ -103,23 +108,23 @@ class WGAN_GP(object):
     self.D_logits, _     = self.discriminator(inputs, self.y, reuse=False)
     # output of D for fake images
     self.sampler            = self.sampler(self.z, self.y)
-	
+
     #self.D_, self.D_logits_ = self.discriminator(self.G, self.y, reuse=True)
     self.D_logits_, self.D__   = self.discriminator(self.G, self.y, reuse=True)
     #self.sampler            = self.sampler(self.z, self.y)
-	
+
 	# final summary operations
     self.d_sum  = histogram_summary("d", self.D_logits)
     self.d__sum = histogram_summary("d_", self.D_logits_)
     self.G_sum  = image_summary("G", self.G)
-	
+
     # get loss for discriminator
     self.d_loss_real = -tf.reduce_mean(self.D_logits)
     self.d_loss_fake = tf.reduce_mean(self.D_logits_)
     self.d_loss      = self.d_loss_real + self.d_loss_fake
     #get loss for generator
     self.g_loss      = -tf.reduce_mean(self.D_logits_)
-	
+
     #self.d_sum = histogram_summary("d", self.D)
     #self.d__sum = histogram_summary("d_", self.D_)
     #self.G_sum = image_summary("G", self.G)
@@ -142,7 +147,7 @@ class WGAN_GP(object):
     self.d_loss_fake_sum = scalar_summary("d_loss_fake", self.d_loss_fake)
     self.g_loss_sum      = scalar_summary("g_loss", self.g_loss)
     self.d_loss_sum      = scalar_summary("d_loss", self.d_loss)
-    
+
     """ Training """
     # divide trainable variables into a group for D and a group for G
     t_vars = tf.trainable_variables()
@@ -170,7 +175,7 @@ class WGAN_GP(object):
     self.writer = SummaryWriter("./logs", self.sess.graph)
 
     sample_z = np.random.uniform(-1, 1, size=(self.sample_num , self.z_dim))
-  
+
     sample_files = self.data[0:self.sample_num]
     sample = [
 	  get_image(sample_file,
@@ -184,7 +189,7 @@ class WGAN_GP(object):
       sample_inputs = np.array(sample).astype(np.float32)[:, :, :, None]
     else:
       sample_inputs = np.array(sample).astype(np.float32)
-  
+
     counter = 1
     start_time = time.time()
     could_load, checkpoint_counter = self.load(self.checkpoint_dir)
@@ -194,7 +199,7 @@ class WGAN_GP(object):
     else:
       print(" [!] Load failed...")
 
-    for epoch in xrange(config.epoch):   
+    for epoch in xrange(config.epoch):
       self.data = glob(os.path.join("./data", config.dataset, self.input_fname_pattern))
       batch_idxs = min(len(self.data), config.train_size) // config.batch_size
 
@@ -225,11 +230,11 @@ class WGAN_GP(object):
         # Run g_optim twice to make sure that d_loss does not go to zero (different from paper)
         _, summary_str,g_loss = self.sess.run([g_optim, self.g_sum, self.g_loss],feed_dict={ self.z: batch_z })
         self.writer.add_summary(summary_str, counter)
-          
+
         #errD_fake = self.d_loss_fake.eval({ self.z: batch_z })
         #errD_real = self.d_loss_real.eval({ self.inputs: batch_images })
         #errG      = self.g_loss.eval({self.z: batch_z})
-		
+
         counter += 1
         print("Epoch: [%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
           % (epoch, idx, batch_idxs,time.time() - start_time, d_loss, g_loss))
@@ -244,7 +249,7 @@ class WGAN_GP(object):
 			)
             save_images(samples, image_manifold_size(samples.shape[0]),
 			     './{}/train_{:02d}_{:04d}.png'.format(config.sample_dir, epoch, idx))
-            print("[Sample] d_loss: %.8f, g_loss: %.8f" % (d_loss, g_loss)) 
+            print("[Sample] d_loss: %.8f, g_loss: %.8f" % (d_loss, g_loss))
 		#tick()
 
         if np.mod(counter, 500) == 2:
@@ -252,24 +257,27 @@ class WGAN_GP(object):
   ##################################################################################
   # Discriminator
   ##################################################################################
-  
+
   def discriminator(self, image, y=None, reuse=False):
     with tf.variable_scope("discriminator") as scope:
       if reuse:
         scope.reuse_variables()
       ch = self.df_dim*8
       h0 = lrelu(conv2d(image, self.df_dim, name='d_h0_conv'))
+      #h0 = self.attention(h0, ch)
       h1 = lrelu(conv2d(h0, self.df_dim*2, name='d_h1_conv'))
       h2 = lrelu(conv2d(h1, self.df_dim*4, name='d_h2_conv'))
       h3 = lrelu(conv2d(h2, self.df_dim*8, name='d_h3_conv'))
-      h3 = self.attention(h3,ch)
-      h4 = linear(tf.reshape(h3, [self.batch_size, -1]), 1, 'd_h4_lin')
-      return  h4 ,tf.nn.sigmoid(h4)
-		
+      #h3 = self.attention(h3, ch)
+      h4 = lrelu(conv2d(h3,self.df_dim*16,name='d_h4_conv'))
+      #h4 = self.attention(h4,ch)
+      h5 = linear(tf.reshape(h4, [self.batch_size, -1]), 1, 'd_h5_lin')
+      return  h5 ,tf.nn.sigmoid(h5)
+
   ##################################################################################
   # Generator
   ##################################################################################
-  
+
   def generator(self, z, y=None):
     with tf.variable_scope("generator") as scope:
       s_h, s_w     = self.output_height, self.output_width
@@ -277,53 +285,73 @@ class WGAN_GP(object):
       s_h4, s_w4   = conv_out_size_same(s_h2, 2), conv_out_size_same(s_w2, 2)
       s_h8, s_w8   = conv_out_size_same(s_h4, 2), conv_out_size_same(s_w4, 2)
       s_h16, s_w16 = conv_out_size_same(s_h8, 2), conv_out_size_same(s_w8, 2)
+      s_h32, s_w32 = conv_out_size_same(s_h16, 2), conv_out_size_same(s_h16, 2)
       ch = self.gf_dim
       # project `z` and reshape
-      self.z_, self.h0_w, self.h0_b = linear(z, self.gf_dim*8*s_h16*s_w16, 'g_h0_lin', with_w=True)
-	  
-      self.h0 = tf.reshape(self.z_, [-1, s_h16, s_w16, self.gf_dim * 8])
+      self.z_, self.h0_w, self.h0_b = linear(z, self.gf_dim*16*s_h32*s_w32, 'g_h0_lin', with_w=True)
+
+      self.h0 = tf.reshape(self.z_, [-1, s_h32, s_w32, self.gf_dim * 16])
       h0 = tf.nn.relu(self.g_bn0(self.h0))
 
-      self.h1, self.h1_w, self.h1_b = deconv2d(h0, [self.batch_size, s_h8, s_w8, self.gf_dim*4], name='g_h1', with_w=True)
+      self.h1, self.h1_w, self.h1_b = deconv2d(h0, [self.batch_size, s_h16, s_w16, self.gf_dim*8], name='g_h1', with_w=True)
       h1 = tf.nn.relu(self.g_bn1(self.h1))
 
-      h2, self.h2_w, self.h2_b      = deconv2d(h1, [self.batch_size, s_h4, s_w4, self.gf_dim*2], name='g_h2', with_w=True)
+      h2, self.h2_w, self.h2_b      = deconv2d(h1, [self.batch_size, s_h8, s_w8, self.gf_dim*4], name='g_h2', with_w=True)
       h2 = tf.nn.relu(self.g_bn2(h2))
 
-      h3, self.h3_w, self.h3_b      = deconv2d(h2, [self.batch_size, s_h2, s_w2, self.gf_dim*1], name='g_h3', with_w=True)
+      h3, self.h3_w, self.h3_b      = deconv2d(h2, [self.batch_size, s_h4, s_w4, self.gf_dim*2], name='g_h3', with_w=True)
       h3 = tf.nn.relu(self.g_bn3(h3))
-      h3 = self.attention(h3, ch)
-      h4, self.h4_w, self.h4_b      = deconv2d(h3, [self.batch_size, s_h, s_w, self.c_dim], name='g_h4', with_w=True)
-      return tf.nn.tanh(h4)
+
+      h4, self.h4_w, self.h4_b = deconv2d(h3, [self.batch_size, s_h2, s_w2, self.gf_dim * 1], name='g_h4', with_w=True)
+      h4 = tf.nn.relu(self.g_bn4(h4))
+
+      #h4 = self.attention(h4, ch)
+
+      #h5, self.h5_w, self.h5_b = deconv2d(h4, [self.batch_size, s_h2, s_w2, self.gf_dim * 1], name='g_h5', with_w=True)
+      #h5 = tf.nn.relu(self.g_bn5(h5))
+
+
+      #h5 = self.attention(h5, ch)
+      h5, self.h5_w, self.h5_b      = deconv2d(h4, [self.batch_size, s_h, s_w, self.c_dim], name='g_h5', with_w=True)
+      return tf.nn.tanh(h5)
 
   def sampler(self, z, y=None):
     with tf.variable_scope("generator") as scope:
       scope.reuse_variables()
-	  
+
       s_h, s_w     = self.output_height, self.output_width
-      s_h2, s_w2   = conv_out_size_same(s_h, 2), conv_out_size_same(s_w, 2)
+      s_h2, s_w2   = conv_out_size_same(s_h, 2),  conv_out_size_same(s_w, 2)
       s_h4, s_w4   = conv_out_size_same(s_h2, 2), conv_out_size_same(s_w2, 2)
       s_h8, s_w8   = conv_out_size_same(s_h4, 2), conv_out_size_same(s_w4, 2)
       s_h16, s_w16 = conv_out_size_same(s_h8, 2), conv_out_size_same(s_w8, 2)
+      s_h32, s_w32 = conv_out_size_same(s_h16,2), conv_out_size_same(s_h16,2)
       ch = self.gf_dim
       # project `z` and reshape
-      h0 = tf.reshape(linear(z, self.gf_dim*8*s_h16*s_w16, 'g_h0_lin'),[-1, s_h16, s_w16, self.gf_dim * 8])
+      h0 = tf.reshape(linear(z, self.gf_dim*16*s_h32*s_w32, 'g_h0_lin'),[-1, s_h32, s_w32, self.gf_dim * 16])
       h0 = tf.nn.relu(self.g_bn0(h0, train=False))
 
-      h1 = deconv2d(h0, [self.batch_size, s_h8, s_w8, self.gf_dim*4], name='g_h1')
+      h1 = deconv2d(h0, [self.batch_size, s_h16, s_w16, self.gf_dim*8], name='g_h1')
       h1 = tf.nn.relu(self.g_bn1(h1, train=False))
 
-      h2 = deconv2d(h1, [self.batch_size, s_h4, s_w4, self.gf_dim*2], name='g_h2')
+      h2 = deconv2d(h1, [self.batch_size, s_h8, s_w8, self.gf_dim*4], name='g_h2')
       h2 = tf.nn.relu(self.g_bn2(h2, train=False))
 
-      h3 = deconv2d(h2, [self.batch_size, s_h2, s_w2, self.gf_dim*1], name='g_h3')
+      h3 = deconv2d(h2, [self.batch_size, s_h4, s_w4, self.gf_dim * 2], name='g_h3')
       h3 = tf.nn.relu(self.g_bn3(h3, train=False))
-	  
-      h3 = self.attention(h3, ch)
-	  
-      h4 = deconv2d(h3, [self.batch_size, s_h, s_w, self.c_dim], name='g_h4')
 
-      return tf.nn.tanh(h4)
+      h4 = deconv2d(h3, [self.batch_size, s_h2, s_w2, self.gf_dim * 1], name='g_h4')
+      h4 = tf.nn.relu(self.g_bn4(h4, train=False))
+
+      #h4 = self.attention(h4, ch)
+
+      #h5 = deconv2d(h4, [self.batch_size, s_h, s_w2, self.gf_dim*1], name='g_h5')
+      #h5 = tf.nn.relu(self.g_bn5(h5, train=False))
+
+      #h5= self.attention(h5, ch)
+
+      h5 = deconv2d(h4, [self.batch_size, s_h, s_w, self.c_dim], name='g_h5')
+
+      return tf.nn.tanh(h5)
   def attention(self, x, ch):
         f = conv(x, ch // 8, kernel=1, stride=1, scope='f_conv')
         g = conv(x, ch // 8, kernel=1, stride=1, scope='g_conv')
@@ -345,7 +373,7 @@ class WGAN_GP(object):
   @property
   def model_dir(self):
     return "{}_{}_{}_{}".format(self.dataset_name, self.batch_size,self.output_height, self.output_width)
-      
+
   def save(self, checkpoint_dir, step):
     model_name     = "WGAN_GP.model"
     checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
