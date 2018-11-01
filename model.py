@@ -336,24 +336,24 @@ class WGAN_GP(object):
       h0 = tf.reshape(linear(z, self.gf_dim*16*s_h32*s_w32, 'g_h0_lin'),[-1, s_h32, s_w32, self.gf_dim * 16])
       h0 = tf.nn.relu(self.g_bn0(h0, train=False))
 
-      h1 = deconv2d(h0, [self.batch_size, s_h16, s_w16, self.gf_dim*16],d_h=1,d_w=1,name='g_h1')
+      h1 = deconv2d(h0, [self.batch_size, s_h32, s_w32, self.gf_dim*16],d_h=1,d_w=1,name='g_h1')
       h1 = tf.nn.relu(self.g_bn1(h1, train=False))
 
-      h2 = deconv2d(h1, [self.batch_size, s_h8, s_w8, self.gf_dim*8], name='g_h2')
+      h2 = deconv2d(h1, [self.batch_size, s_h16, s_w16, self.gf_dim*8], name='g_h2')
       h2 = tf.nn.relu(self.g_bn2(h2, train=False))
 
-      h2 = deconv2d(h2, [self.batch_size, s_h8, s_w8, self.gf_dim * 8],d_h=1,d_w=1,name='g_h2_1')
+      h2 = deconv2d(h2, [self.batch_size, s_h16, s_w16, self.gf_dim * 8],d_h=1,d_w=1,name='g_h2_1')
       h2 = tf.nn.relu(self.g_bn3(h2, train=False))
 
-      h3 = deconv2d(h2, [self.batch_size, s_h4, s_w4, self.gf_dim * 4], name='g_h3')
+      h3 = deconv2d(h2, [self.batch_size, s_h8, s_w8, self.gf_dim * 4], name='g_h3')
       h3 = tf.nn.relu(self.g_bn4(h3, train=False))
 
-      h4 = deconv2d(h3, [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h4')
+      h4 = deconv2d(h3, [self.batch_size, s_h4, s_w4, self.gf_dim * 2], name='g_h4')
       h4 = tf.nn.relu(self.g_bn5(h4, train=False))
 
       h4 = self.attention(h4, ch)
 
-      h5 = deconv2d(h4, [self.batch_size, s_h, s_w2, self.gf_dim*1], name='g_h5')
+      h5 = deconv2d(h4, [self.batch_size, s_h2, s_w2, self.gf_dim*1], name='g_h5')
       h5 = tf.nn.relu(self.g_bn6(h5, train=False))
 
       #h5= self.attention(h5, ch)
